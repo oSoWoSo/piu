@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>piu (Platform Independent Updater)</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()">🌓</button>
+<script>
+  function toggleTheme(){
+    const html=document.documentElement;
+    const current=html.getAttribute("data-theme")||"dark";
+    const next=current==="dark"?"light":"dark";
+    html.setAttribute("data-theme",next);
+    localStorage.setItem("theme",next)
+  }
+  (function(){
+    const saved=localStorage.getItem("theme")||"dark";
+    document.documentElement.setAttribute("data-theme",saved)
+  })();
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const toc = document.getElementById("TOC");
+    if (!toc) return;
+
+    // Add toc-title with toggle button
+    const titleEl = document.createElement("div");
+    titleEl.id = "toc-title";
+    titleEl.innerHTML = '<span>Contents</span><span id="toc-toggle-icon">◀</span>';
+    toc.insertBefore(titleEl, toc.firstChild);
+
+    // Wrap TOC + the rest of the content in .page-wrapper
+    const body = document.body;
+    const wrapper = document.createElement("div");
+    wrapper.className = "page-wrapper";
+
+    // Find all elements after <nav> (main nav menu)
+    const topNav = document.querySelector("body > nav");
+    const siblings = [];
+    let el = topNav ? topNav.nextElementSibling : body.firstElementChild;
+    while (el) {
+      siblings.push(el);
+      el = el.nextElementSibling;
+    }
+
+    siblings.forEach((s) => wrapper.appendChild(s));
+    body.appendChild(wrapper);
+
+    // Wrap main content (everything except TOC) in .main-content
+    const mainContent = document.createElement("div");
+    mainContent.className = "main-content";
+    Array.from(wrapper.children).forEach((child) => {
+      if (child.id !== "TOC") mainContent.appendChild(child);
+    });
+    wrapper.appendChild(mainContent);
+
+    // Collapsible toggle
+    const icon = document.getElementById("toc-toggle-icon");
+    const saved = localStorage.getItem("toc-collapsed");
+    if (saved === "true") {
+      toc.classList.add("collapsed");
+      icon.textContent = "▶";
+    }
+
+    titleEl.addEventListener("click", function () {
+      toc.classList.toggle("collapsed");
+      const isCollapsed = toc.classList.contains("collapsed");
+      icon.textContent = isCollapsed ? "▶" : "◀";
+      localStorage.setItem("toc-collapsed", isCollapsed);
+    });
+  });
+</script>
+<nav><ul>
+  <li><a href="https://osowoso.org">oSoWoSo</a></li>
+  <li><a href="index.html" class="active">Home</a></li>
+  <li><a class="no-release" href="https://github.com/oSoWoSo/piu/releases/latest">⏬ release</a></li>
+  <li><a href="https://github.com/oSoWoSo/piu/archive/refs/heads/main.zip">📦repo zip</a></li>
+  <li><a href="https://github.com/oSoWoSo/piu">🔗git</a></li>
+  <li>⏭️</a></li>
+</ul></nav>
+<header id="title-block-header">
+<h1 class="title">piu (Platform Independent Updater)</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#features" id="toc-features">Features</a></li>
+<li><a href="#currently-supports" id="toc-currently-supports">Currently
+Supports</a></li>
+<li><a href="#installation" id="toc-installation">Installation</a>
+<ul>
+<li><a href="#uninstall" id="toc-uninstall">Uninstall</a></li>
+<li><a href="#optional-sudo-setup" id="toc-optional-sudo-setup">Optional
+<code>sudo</code> Setup</a></li>
+<li><a href="#bug-reports" id="toc-bug-reports">Bug Reports</a></li>
+<li><a href="#contributing" id="toc-contributing">Contributing</a></li>
+</ul></li>
+<li><a href="#license" id="toc-license">License</a></li>
+</ul>
+</nav>
+<img align="right" alt="Skunk Logo" src="https://piu.osowoso.org/logo/skunk-logo.png">
+
+<p><strong><code>piu</code> makes cross-platform package management
+stink less.</strong></p>
+<p><code>piu</code> is an all-in-one wrapper for different package
+managers. It was born out of frustration over constantly typing the
+wrong command or passing the wrong flags when on different Linux
+distros.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li><code>piu</code> works the same across distros, no more memorising
+each package manager and its quirks</li>
+<li>Auto-update package repositories if they're old when installing or
+upgrading the system (no need for additional flags).</li>
+<li>Includes a built-in option to install locally downloaded packages,
+even when the standard package manager doesn't support that; such as
+<code>dpkg</code> vs. <code>apt</code></li>
+<li>Print the number of updates available, suitable for use in a status
+bar or shell scripts</li>
+<li><code>sudo</code> automatically if additional permissions are
+needed. <em>No more...</em></li>
+</ul>
+<pre><code>E: Could not open lock file /var/lib/dpkg/lock - open (13: Permission denied)
+E: Unable to lock the administration directory (/var/lib/dpkg/), are you root?</code></pre>
+<ul>
+<li>And most important: <em>less typing!</em> Compare <code>piu u</code>
+to <code>apt update &amp;&amp; apt upgrade</code></li>
+</ul>
+<h3 id="currently-supports">Currently Supports</h3>
+<blockquote>
+<p><em><a href="https://alpinelinux.org/">Alpine Linux</a>,</em> <em><a
+href="https://www.archlinux.org/">Arch Linux</a>,</em> <em><a
+href="https://www.debian.org/">Debian</a>,</em> <em><a
+href="https://elementary.io/">elementary OS</a>,</em> <em><a
+href="https://getfedora.org/">Fedora</a>,</em> <em><a
+href="https://www.apple.com/macos/">macOS</a>,</em> <em><a
+href="https://manjaro.org/">Manjaro</a>,</em> <em><a
+href="https://www.linuxmint.com/">Linux Mint</a>,</em> <em><a
+href="https://opensuse.org">OpenSUSE</a>,</em> <em><a
+href="http://store.steampowered.com/steamos/">SteamOS</a>,</em> <em><a
+href="https://www.ubuntu.com/">Ubuntu</a>, and</em> <em><a
+href="https://voidlinux.org/">Void Linux</a></em></p>
+</blockquote>
+<p><img src="https://piu.osowoso.org/brands/alpine.png"
+title="Alpine Linux" alt="Alpine Linux" />   <img
+src="https://piu.osowoso.org/brands/arch.png" title="Arch Linux"
+alt="Arch Linux" />   <img src="https://piu.osowoso.org/brands/mint.png"
+title="Linux Mint" alt="Linux Mint" />   <img
+src="https://piu.osowoso.org/brands/macos.png" title="macOS"
+alt="macOS" />   <img src="https://piu.osowoso.org/brands/ubuntu.png"
+title="Ubuntu" alt="Ubuntu" />  </p>
+<p><img src="https://piu.osowoso.org/brands/elementary.png"
+title="Elementary OS" alt="Elementary OS" />   <img
+src="https://piu.osowoso.org/brands/debian.png" title="Debian"
+alt="Debian" />   <img src="https://piu.osowoso.org/brands/manjaro.png"
+title="Manjaro" alt="Manjaro" />   <img
+src="https://piu.osowoso.org/brands/fedora.png" title="Fedora"
+alt="Fedora" />   <img src="https://piu.osowoso.org/brands/void.png"
+title="Void Linux" alt="Void Linux" /> <img
+src="https://piu.osowoso.org/brands/opensuse.png" title="OpenSUSE"
+alt="OpenSUSE" />  </p>
+<blockquote>
+<p><span class="emoji" data-emoji="copyright">©️</span> <em>above
+brands, logos, and trademarks are property of their respective
+owners.</em></p>
+</blockquote>
+<h2 id="installation">Installation</h2>
+<pre class="console"><code>$ curl https://raw.githubusercontent.com/beyondmeh/piu/master/piu -o piu &amp;&amp; chmod +x piu &amp;&amp; sudo mv piu /usr/local/bin</code></pre>
+<p>Alternatively, if you have something like <code>~/bin</code> setup,
+just download <code>piu</code> there.</p>
+<h3 id="uninstall">Uninstall</h3>
+<pre class="console"><code>$ sudo rm /usr/local/bin/piu</code></pre>
+<h3 id="optional-sudo-setup">Optional <code>sudo</code> Setup</h3>
+<p>While not required, if you will be using <code>piu</code> in a status
+bar script you should setup <code>sudo</code> to allow the package
+manager to sync its cache without prompting for a password.</p>
+<p>This will allow <code>piu</code> to automatically refresh the package
+manager's cache periodically. Otherwise, <code>piu</code> will simply
+state the cache is out-of-date.</p>
+<p>Add the following to <code>/etc/sudoers</code>, depending on your
+distribution:</p>
+<h4 id="apt-debian--ubuntu">apt (Debian &amp; Ubuntu)</h4>
+<pre class="console"><code>%wheel ALL=(ALL) NOPASSWD: /usr/bin/apt update</code></pre>
+<h4 id="pacman-arch-linux">pacman (Arch Linux)</h4>
+<pre class="console"><code>%wheel ALL=(ALL) NOPASSWD: /usr/bin/pacman -Sy</code></pre>
+<h4 id="xbps-void-linux">xbps (Void Linux)</h4>
+<pre class="console"><code>%wheel ALL=(ALL) NOPASSWD: /usr/bin/xbps-install -S</code></pre>
+<p><strong>NOTE</strong>: updating the package cache is relatively
+innocuous and safe to perform automatically without password; it does
+not install, update, or replace any programs. Most package managers need
+additional permissions simply because the cache is usually in
+<code>/var</code>, where most users don't have write permission.</p>
+<h3 id="bug-reports">Bug Reports</h3>
+<p>Submit bug reports via GitHub's <a
+href="https://github.com/beyondmeh/piu/issues">Issue Tracker</a></p>
+<h3 id="contributing">Contributing</h3>
+<p><code>piu</code> makes package manage stink even less thanks to <a
+href="https://github.com/beyondmeh/piu/graphs/contributors">all of its
+contributors</a>, both on GitHub and elsewhere.</p>
+<blockquote>
+<p>The project's skunk logo was drawn by the very talented Kelly. It has
+been digitized, cropped, and optimized for the web using <a
+href="https://www.gimp.org/">GIMP</a> and <a
+href="http://optipng.sourceforge.net/">OptiPNG</a>.</p>
+<p>All the versions of the the logo, including the original drawing, are
+located in the <code>src/logo</code> folder. All versions of the skunk
+logo are licensed under a <a
+href="https://creativecommons.org/licenses/by-sa/4.0/">Creative Commons
+Attribution-ShareAlike 4.0 International License</a>.</p>
+</blockquote>
+<p>If you can make piu better or add support for a missing distro,
+please feel free to submit a pull request. There are no further
+requirements, contributing to <code>piu</code> is easy and also doesn't
+stink!</p>
+<h2 id="license">License</h2>
+<p>Copyright © 2017 - 2023 BeyondMeh, except where otherwise noted.</p>
+<p>Licensed under the <a
+href="https://github.com/beyondmeh/piu/blob/master/LICENSE">ISC
+license</a>.</p>
+<p><em>This is free software: you are free to change and redistribute
+it. There is NO WARRANTY, to the extent permitted by law.</em></p>
+<script>
+(function () {
+  function hexToRgb(hex) {
+    hex = hex.trim().replace(/^#/, '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const n = parseInt(hex, 16);
+    return [n >> 16 & 255, n >> 8 & 255, n & 255];
+  }
+
+  function clamp(v, min, max) {
+    return Math.min(Math.max(v, min), max);
+  }
+
+  function Color(r, g, b) {
+    this.r = r / 255;
+    this.g = g / 255;
+    this.b = b / 255;
+  }
+
+  Color.prototype.applyFilter = function (funcs) {
+    let [r, g, b] = [this.r * 255, this.g * 255, this.b * 255];
+
+    function multiply(matrix) {
+      const nr = clamp(r * matrix[0] + g * matrix[1] + b * matrix[2], 0, 255);
+      const ng = clamp(r * matrix[3] + g * matrix[4] + b * matrix[5], 0, 255);
+      const nb = clamp(r * matrix[6] + g * matrix[7] + b * matrix[8], 0, 255);
+      r = nr; g = ng; b = nb;
+    }
+
+    function hueRotate(angle) {
+      const a = angle / 180 * Math.PI;
+      const sin = Math.sin(a), cos = Math.cos(a);
+      multiply([
+        0.213 + cos*0.787 - sin*0.213, 0.715 - cos*0.715 - sin*0.715, 0.072 - cos*0.072 + sin*0.928,
+        0.213 - cos*0.213 + sin*0.143, 0.715 + cos*0.285 + sin*0.140, 0.072 - cos*0.072 - sin*0.283,
+        0.213 - cos*0.213 - sin*0.787, 0.715 - cos*0.715 + sin*0.715, 0.072 + cos*0.928 + sin*0.072,
+      ]);
+    }
+
+    function sepia(v) {
+      multiply([
+        0.393 + 0.607*(1-v), 0.769 - 0.769*(1-v), 0.189 - 0.189*(1-v),
+        0.349 - 0.349*(1-v), 0.686 + 0.314*(1-v), 0.168 - 0.168*(1-v),
+        0.272 - 0.272*(1-v), 0.534 - 0.534*(1-v), 0.131 + 0.869*(1-v),
+      ]);
+    }
+
+    function saturate(v) {
+      multiply([
+        0.213 + 0.787*v, 0.715 - 0.715*v, 0.072 - 0.072*v,
+        0.213 - 0.213*v, 0.715 + 0.285*v, 0.072 - 0.072*v,
+        0.213 - 0.213*v, 0.715 - 0.715*v, 0.072 + 0.928*v,
+      ]);
+    }
+
+    for (const [fn, val] of funcs) {
+      if (fn === 'invert')    { r = clamp((1-r/255)*255*val + r/255*255*(1-val),0,255); g = clamp((1-g/255)*255*val + g/255*255*(1-val),0,255); b = clamp((1-b/255)*255*val + b/255*255*(1-val),0,255); }
+      if (fn === 'sepia')     sepia(val);
+      if (fn === 'saturate')  saturate(val);
+      if (fn === 'hueRotate') hueRotate(val);
+      if (fn === 'brightness'){ r = clamp(r*val,0,255); g = clamp(g*val,0,255); b = clamp(b*val,0,255); }
+    }
+
+    return new Color(r, g, b);
+  };
+
+  function loss(result, target) {
+    return (
+      Math.pow(result.r*255 - target.r*255, 2) +
+      Math.pow(result.g*255 - target.g*255, 2) +
+      Math.pow(result.b*255 - target.b*255, 2)
+    );
+  }
+
+  function solve(target) {
+    function css(v) {
+      return [
+        ['invert',    clamp(v[0], 0, 1)],
+        ['sepia',     clamp(v[1], 0, 1)],
+        ['saturate',  clamp(v[2], 0, 20)],
+        ['hueRotate', clamp(v[3], 0, 360)],
+        ['brightness',clamp(v[4], 0, 10)],
+        ['brightness',clamp(v[5], 0, 10)],
+      ];
+    }
+
+    function score(v) {
+      return loss(new Color(0,0,0).applyFilter(css(v)), target);
+    }
+
+    let best = null, bestScore = Infinity;
+    for (let i = 0; i < 30; i++) {
+      let v = [Math.random(), Math.random(), Math.random()*10, Math.random()*360, Math.random()*2, Math.random()*2];
+      for (let step = 1; step > 0.0001; step *= 0.9) {
+        for (let j = 0; j < v.length; j++) {
+          const orig = v[j];
+          v[j] += step * (Math.random() > 0.5 ? 1 : -1);
+          const s = score(v);
+          if (s < bestScore) { bestScore = s; best = [...v]; }
+          else v[j] = orig;
+        }
+      }
+    }
+
+    const f = css(best);
+    return [
+      `invert(${(clamp(f[0][1],0,1)*100).toFixed(0)}%)`,
+      `sepia(${(clamp(f[1][1],0,1)*100).toFixed(0)}%)`,
+      `saturate(${(clamp(f[2][1],0,20)*100).toFixed(0)}%)`,
+      `hue-rotate(${clamp(f[3][1],0,360).toFixed(0)}deg)`,
+      `brightness(${(clamp(f[4][1],0,10)*100).toFixed(0)}%)`,
+      `brightness(${(clamp(f[5][1],0,10)*100).toFixed(0)}%)`,
+    ].join(' ');
+  }
+
+  // Cache solved filters per color so theme switching is instant
+  const cache = {};
+
+  function applyIconColor() {
+    const raw = getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-icon').trim();
+    if (!raw) return false;
+
+    let rgb;
+    if (raw.startsWith('#')) {
+      rgb = hexToRgb(raw);
+    } else if (raw.startsWith('rgb')) {
+      rgb = raw.match(/\d+/g).map(Number).slice(0, 3);
+    } else {
+      return false;
+    }
+
+    const key = rgb.join(',');
+    if (!cache[key]) {
+      cache[key] = solve(new Color(...rgb));
+    }
+
+    document.documentElement.style.setProperty('--filter-icon', cache[key]);
+    return true;
+  }
+
+  function init() {
+    if (!applyIconColor()) return;
+
+    // Watch for data-theme attribute changes on <html> — re-apply immediately
+    new MutationObserver(function(mutations) {
+      for (const m of mutations) {
+        if (m.attributeName === 'data-theme') {
+          applyIconColor();
+          break;
+        }
+      }
+    }).observe(document.documentElement, { attributes: true });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

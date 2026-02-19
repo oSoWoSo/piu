@@ -1,6 +1,4 @@
-# piu (Platform Independent Updater)
-
-<img align="right" alt="Skunk Logo" src=".readme-assets/logo/skunk-logo.png">
+<img align="right" alt="Skunk Logo" src="https://piu.osowoso.org/logo/skunk-logo.png">
 
 **`piu` makes cross-platform package management stink less.**
 
@@ -41,19 +39,19 @@ E: Unable to lock the administration directory (/var/lib/dpkg/), are you root?
 > *[Ubuntu](https://www.ubuntu.com/), and*
 > *[Void Linux](https://voidlinux.org/)*
 
-![Alpine Linux](.readme-assets/brands/alpine.png "Alpine Linux") &nbsp;
-![Arch Linux](.readme-assets/brands/arch.png "Arch Linux") &nbsp;
-![Linux Mint](.readme-assets/brands/mint.png "Linux Mint") &nbsp;
-![macOS](.readme-assets/brands/macos.png "macOS") &nbsp;
-![Ubuntu](.readme-assets/brands/ubuntu.png "Ubuntu")
+![Alpine Linux](https://piu.osowoso.org/brands/alpine.png "Alpine Linux") &nbsp;
+![Arch Linux](https://piu.osowoso.org/brands/arch.png "Arch Linux") &nbsp;
+![Linux Mint](https://piu.osowoso.org/brands/mint.png "Linux Mint") &nbsp;
+![macOS](https://piu.osowoso.org/brands/macos.png "macOS") &nbsp;
+![Ubuntu](https://piu.osowoso.org/brands/ubuntu.png "Ubuntu")
 &nbsp;
 
-![Elementary OS](.readme-assets/brands/elementary.png "Elementary OS") &nbsp;
-![Debian](.readme-assets/brands/debian.png "Debian") &nbsp;
-![Manjaro](.readme-assets/brands/manjaro.png "Manjaro") &nbsp;
-![Fedora](.readme-assets/brands/fedora.png "Fedora") &nbsp;
-![Void Linux](.readme-assets/brands/void.png "Void Linux")
-![OpenSUSE](.readme-assets/brands/opensuse.png "OpenSUSE")
+![Elementary OS](https://piu.osowoso.org/brands/elementary.png "Elementary OS") &nbsp;
+![Debian](https://piu.osowoso.org/brands/debian.png "Debian") &nbsp;
+![Manjaro](https://piu.osowoso.org/brands/manjaro.png "Manjaro") &nbsp;
+![Fedora](https://piu.osowoso.org/brands/fedora.png "Fedora") &nbsp;
+![Void Linux](https://piu.osowoso.org/brands/void.png "Void Linux")
+![OpenSUSE](https://piu.osowoso.org/brands/opensuse.png "OpenSUSE")
 &nbsp;
 > :copyright: *above brands, logos, and trademarks are property of
 their respective owners.*
@@ -118,7 +116,7 @@ Submit bug reports via GitHub's [Issue Tracker](https://github.com/beyondmeh/piu
 > [GIMP](https://www.gimp.org/) and [OptiPNG](http://optipng.sourceforge.net/).
 >
 > All the versions of the the logo, including the original drawing, are
-> located in the `.readme-assets/logo` folder. All versions of the skunk logo
+> located in the `src/logo` folder. All versions of the skunk logo
 > are licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/).
 
 If you can make piu better or add support for a missing distro, please feel free to submit a pull request. There are no further requirements, contributing to `piu` is easy and also doesn't stink! 
