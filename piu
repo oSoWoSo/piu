@@ -254,7 +254,7 @@ zypper_repo_update() {
 	fi
 }
 zypper_num_updates() { zypper lu | grep ^v | wc -l; }
-zyyper_num_pkgs() { zypper_list | wc -l; }
+zypper_num_pkgs() { zypper_list | wc -l; }
 #
 # macOS
 #
