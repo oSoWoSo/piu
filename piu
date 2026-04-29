@@ -357,7 +357,13 @@ is_darwin() { uname -a | grep Darwin > /dev/null; }
 # Nix detection and helper functions
 __nix_detect_version() {
 	# Returns Nix version (e.g., "2.18.1")
-	nix --version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1
+	# Try nix-env first as it doesn't require experimental features
+	local version=$(nix-env --version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+	if [[ -z "$version" ]]; then
+		# Fallback to nix --version
+		version=$(nix --version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+	fi
+	echo "$version"
 }
 
 __nix_version_ge() {
@@ -391,6 +397,11 @@ __nix_detect_flakes() {
 		fi
 	done
 
+	# Also try to actually run a nix command to test
+	if nix --version &>/dev/null; then
+		return 0
+	fi
+
 	return 1
 }
 
@@ -415,13 +426,26 @@ __nix_get_install_method() {
 					return 0
 				fi
 			elif [[ "$flakes_enabled" == "yes" ]]; then
-				echo "flakes"
-				return 0
+				# User wants flakes but verify they work
+				if __nix_detect_flakes; then
+					echo "flakes"
+					return 0
+				else
+					# Flakes requested but not available, fallback to nix-env
+					echo "nix-env"
+					return 0
+				fi
 			fi
 
-			# Nix 2.4+ without flakes
-			echo "nix-profile"
-			return 0
+			# Nix 2.4+ without flakes - check if nix-command works
+			if nix --version &>/dev/null; then
+				echo "nix-profile"
+				return 0
+			else
+				# nix-command not available, use nix-env
+				echo "nix-env"
+				return 0
+			fi
 		else
 			# Older Nix version
 			echo "nix-env"
@@ -521,8 +545,21 @@ nix_purge() {
 }
 
 nix_search() {
-	# nix search works the same for all methods
-	nix search nixpkgs "$@"
+	# Use appropriate search method based on installation method
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			# Use nix-env for searching (doesn't require experimental features)
+			nix-env -qaP "$@" | grep -i "$@"
+			;;
+		nix-profile|flakes)
+			# Try nix search, fallback to nix-env if it fails
+			if ! nix search nixpkgs "$@" 2>/dev/null; then
+				nix-env -qaP "$@" | grep -i "$@"
+			fi
+			;;
+	esac
 }
 
 nix_list() {
