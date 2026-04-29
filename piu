@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #Cross-platform package manager wrapper
 #https://github.com/beyondmeh/piu
@@ -9,13 +9,13 @@ __piutmp() {
 	# Piu Temp Directory Manager
 	case ${1} in
 		[sS][tT][aA][rR][tT])
-			[[ -d "/tmp/${0}" ]] || mkdir -p "/tmp/${0}" 2> /dev/null 
+			[[ -d "/tmp/${0}" ]] || mkdir -p "/tmp/${0}" 2> /dev/null
 		;;
 		[sS][tT][oO][pP])
 			[[ -d "/tmp/${0}" ]] && rm -rf "/tmp/${0}" 2> /dev/null
 		;;
 		[rR][eE][sS][tT][aA][rR][tT])
-			[[ -d "/tmp/${0}" ]] && { rm -rf "/tmp/${0}" 2> /dev/null && mkdir -p "/tmp/${0}" 2> /dev/null ; } 
+			[[ -d "/tmp/${0}" ]] && { rm -rf "/tmp/${0}" 2> /dev/null && mkdir -p "/tmp/${0}" 2> /dev/null ; }
 		;;
 	esac
 }
@@ -94,7 +94,7 @@ usage: $(basename "$0") OPTION [--cask] [PACKAGE]
    (l)ist            : list installed packages
    (nu) num-updates  : number of packages with updates
    (np) num-packages : number of installed packages
-   
+
    CONFIGURATION
    --init-config     : create default configuration file at ~/.config/piu/piu.conf
 
@@ -108,14 +108,14 @@ HELP
 init_config() {
 	local config_dir="${HOME}/.config/piu"
 	local config_file="${config_dir}/piu.conf"
-	
+
 	# Check if config already exists
 	if [[ -f "$config_file" ]]; then
 		echo "Configuration file already exists at: $config_file"
 		echo "To recreate it, please remove the existing file first."
 		exit 1
 	fi
-	
+
 	# Create config directory if it doesn't exist
 	if [[ ! -d "$config_dir" ]]; then
 		mkdir -p "$config_dir" 2>/dev/null
@@ -124,11 +124,11 @@ init_config() {
 			exit 1
 		fi
 	fi
-	
+
 	# Find the example config file
 	local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	local example_file="${script_dir}/piu.conf.example"
-	
+
 	if [[ -f "$example_file" ]]; then
 		# Copy example file
 		cp "$example_file" "$config_file"
@@ -158,7 +158,7 @@ EOF
 		echo "Configuration file created at: $config_file"
 		echo "Edit this file to customize piu behavior."
 	fi
-	
+
 	exit 0
 }
 
@@ -365,11 +365,11 @@ __nix_version_ge() {
 	# Usage: __nix_version_ge "2.4"
 	local required="$1"
 	local current=$(__nix_detect_version)
-	
+
 	if [[ -z "$current" ]]; then
 		return 1
 	fi
-	
+
 	# Simple version comparison
 	printf '%s\n%s\n' "$required" "$current" | sort -V -C
 	return $?
@@ -382,7 +382,7 @@ __nix_detect_flakes() {
 		"$HOME/.config/nix/nix.conf"
 		"/etc/nix/nix.conf"
 	)
-	
+
 	for conf in "${config_files[@]}"; do
 		if [[ -f "$conf" ]]; then
 			if grep -q "experimental-features.*nix-command.*flakes\|experimental-features.*flakes.*nix-command" "$conf" 2>/dev/null; then
@@ -390,7 +390,7 @@ __nix_detect_flakes() {
 			fi
 		fi
 	done
-	
+
 	return 1
 }
 
@@ -402,13 +402,13 @@ __nix_detect_nixos() {
 __nix_get_install_method() {
 	# Returns installation method based on config and detection
 	local method="$NIX_INSTALL_METHOD"
-	
+
 	if [[ "$method" == "auto" ]]; then
 		# Auto-detect best method
 		if __nix_version_ge "2.4"; then
 			# Check flakes support
 			local flakes_enabled="$NIX_FLAKES_ENABLED"
-			
+
 			if [[ "$flakes_enabled" == "auto" ]]; then
 				if __nix_detect_flakes; then
 					echo "flakes"
@@ -418,7 +418,7 @@ __nix_get_install_method() {
 				echo "flakes"
 				return 0
 			fi
-			
+
 			# Nix 2.4+ without flakes
 			echo "nix-profile"
 			return 0
@@ -440,7 +440,7 @@ __nix_convert_package_name() {
 	# firefox -> nixpkgs#firefox (for nix profile with flakes)
 	local pkg="$1"
 	local method=$(__nix_get_install_method)
-	
+
 	# If package already has channel/flake prefix, return as-is
 	if [[ "$pkg" == *"."* ]] || [[ "$pkg" == *"#"* ]]; then
 		# Convert between formats if needed
@@ -467,7 +467,7 @@ __nix_convert_package_name() {
 nix_install() {
 	local method=$(__nix_get_install_method)
 	local pkg=$(__nix_convert_package_name "$@")
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -iA "$pkg"
@@ -483,7 +483,7 @@ nix_install() {
 
 nix_update() {
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -u
@@ -496,7 +496,7 @@ nix_update() {
 
 nix_remove() {
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -e "$@"
@@ -509,7 +509,7 @@ nix_remove() {
 
 nix_purge() {
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -e "$@" && nix-collect-garbage -d
@@ -527,7 +527,7 @@ nix_search() {
 
 nix_list() {
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -q
@@ -540,7 +540,7 @@ nix_list() {
 nix_list_files() {
 	# List files in a package's store path
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			if nix-env -q | grep -q "^$@"; then
@@ -568,7 +568,7 @@ nix_list_files() {
 nix_manual() {
 	# Install from a local .nix file or derivation
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -i "$@"
@@ -598,7 +598,7 @@ nix_repo_update() {
 nix_num_updates() {
 	# Compare current generation with what would be updated
 	local method=$(__nix_get_install_method)
-	
+
 	case "$method" in
 		nix-env)
 			nix-env -u --dry-run 2>/dev/null | grep -c "will be updated"
