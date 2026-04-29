@@ -94,9 +94,10 @@ usage: $(basename "$0") OPTION [--cask] [PACKAGE]
    (l)ist            : list installed packages
    (nu) num-updates  : number of packages with updates
    (np) num-packages : number of installed packages
-
+   
    CONFIGURATION
    --init-config     : create default configuration file at ~/.config/piu/piu.conf
+   --apply-nix       : enable Nix experimental features (nix-command and flakes)
 
 https://github.com/beyondmeh/piu
 
@@ -165,6 +166,60 @@ EOF
 # Utils
 ########################################################################
 not_implemented() { echo "'${FUNCNAME[1]}' not implemented yet!" && exit 1; }
+
+nix_apply_experimental_features() {
+	# Enable experimental features for Nix
+	echo "This will enable experimental Nix features (nix-command and flakes)"
+	echo "by adding them to /etc/nix/nix.conf"
+	echo ""
+	echo "The following line will be added:"
+	echo "  experimental-features = nix-command flakes"
+	echo ""
+	read -p "Do you want to continue? [y/N] " -n 1 -r
+	echo
+	
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Cancelled."
+		exit 0
+	fi
+	
+	# Check if /etc/nix/nix.conf exists
+	if [[ ! -f /etc/nix/nix.conf ]]; then
+		echo "Creating /etc/nix/nix.conf..."
+		sudo mkdir -p /etc/nix
+		echo "experimental-features = nix-command flakes" | sudo tee /etc/nix/nix.conf > /dev/null
+	else
+		# Check if experimental-features already exists
+		if grep -q "^experimental-features" /etc/nix/nix.conf; then
+			echo "experimental-features already configured in /etc/nix/nix.conf"
+			echo "Current configuration:"
+			grep "^experimental-features" /etc/nix/nix.conf
+			echo ""
+			read -p "Do you want to update it? [y/N] " -n 1 -r
+			echo
+			
+			if [[ $REPLY =~ ^[Yy]$ ]]; then
+				sudo sed -i 's/^experimental-features.*/experimental-features = nix-command flakes/' /etc/nix/nix.conf
+				echo "Updated experimental-features in /etc/nix/nix.conf"
+			else
+				echo "Cancelled."
+				exit 0
+			fi
+		else
+			# Append to existing config
+			echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+			echo "Added experimental-features to /etc/nix/nix.conf"
+		fi
+	fi
+	
+	echo ""
+	echo "Experimental features enabled successfully!"
+	echo "You may need to restart your shell or run: source ~/.bashrc"
+	echo ""
+	echo "To verify, run: nix --version"
+	
+	exit 0
+}
 
 # Distro Specific
 ########################################################################
@@ -564,13 +619,16 @@ nix_search() {
 
 nix_list() {
 	local method=$(__nix_get_install_method)
-
+	
 	case "$method" in
 		nix-env)
 			nix-env -q
 			;;
 		nix-profile|flakes)
-			nix profile list | awk '{print $1}' | sed 's/.*#//'
+			# Try nix profile list, fallback to nix-env if it fails
+			if ! nix profile list 2>/dev/null | awk '{print $1}' | sed 's/.*#//'; then
+				nix-env -q
+			fi
 			;;
 	esac
 }
@@ -699,10 +757,14 @@ else
 	fi
 fi
 
-# Check for --init-config before platform detection
+# Check for --init-config and --apply-nix before platform detection
 ########################################################################
 if [[ "$1" == "--init-config" ]]; then
 	init_config
+fi
+
+if [[ "$1" == "--apply-nix" ]]; then
+	nix_apply_experimental_features
 fi
 
 # find what we're doing
