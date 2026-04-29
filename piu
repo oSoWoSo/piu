@@ -53,6 +53,22 @@ trap bye INT
 
 UPDATE_AFTER=43200 # 12 hours
 
+# Load configuration
+########################################################################
+PIU_CONFIG="${HOME}/.config/piu/piu.conf"
+
+# Default values
+DEFAULT_PKGMAN=""  # Empty means auto-detect
+NIX_INSTALL_METHOD="auto"
+NIX_FLAKES_ENABLED="auto"
+NIX_SCOPE="user"
+NIX_CHANNEL="nixpkgs"
+
+# Load config if exists
+if [[ -f "$PIU_CONFIG" ]]; then
+	source "$PIU_CONFIG"
+fi
+
 usage() {
 cat <<HELP
 Cross-platform package manager wrapper
@@ -78,12 +94,72 @@ usage: $(basename "$0") OPTION [--cask] [PACKAGE]
    (l)ist            : list installed packages
    (nu) num-updates  : number of packages with updates
    (np) num-packages : number of installed packages
+   
+   CONFIGURATION
+   --init-config     : create default configuration file at ~/.config/piu/piu.conf
 
 https://github.com/beyondmeh/piu
 
 Copyright (c) 2017-2023 BeyondMeh
 Licensed under the ISC license.
 HELP
+}
+
+init_config() {
+	local config_dir="${HOME}/.config/piu"
+	local config_file="${config_dir}/piu.conf"
+	
+	# Check if config already exists
+	if [[ -f "$config_file" ]]; then
+		echo "Configuration file already exists at: $config_file"
+		echo "To recreate it, please remove the existing file first."
+		exit 1
+	fi
+	
+	# Create config directory if it doesn't exist
+	if [[ ! -d "$config_dir" ]]; then
+		mkdir -p "$config_dir" 2>/dev/null
+		if [[ $? -ne 0 ]]; then
+			echo "Error: Could not create directory $config_dir"
+			exit 1
+		fi
+	fi
+	
+	# Find the example config file
+	local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	local example_file="${script_dir}/piu.conf.example"
+	
+	if [[ -f "$example_file" ]]; then
+		# Copy example file
+		cp "$example_file" "$config_file"
+		echo "Configuration file created at: $config_file"
+		echo "Edit this file to customize piu behavior."
+	else
+		# Create basic config if example doesn't exist
+		cat > "$config_file" <<'EOF'
+# Piu Configuration File
+# ======================
+
+# Nix-specific settings
+# =====================
+
+# Installation method: auto, nix-env, nix-profile, flakes
+NIX_INSTALL_METHOD="auto"
+
+# Flakes support: auto, yes, no
+NIX_FLAKES_ENABLED="auto"
+
+# Installation scope: user, system
+NIX_SCOPE="user"
+
+# Channel to use for installations
+NIX_CHANNEL="nixpkgs"
+EOF
+		echo "Configuration file created at: $config_file"
+		echo "Edit this file to customize piu behavior."
+	fi
+	
+	exit 0
 }
 
 # Utils
@@ -278,27 +354,231 @@ is_darwin() { uname -a | grep Darwin > /dev/null; }
 #
 # NixOS / Nix
 #
-nix_install() { nix-env -iA nixpkgs."$@"; }
-nix_update()  { nix-env -u; }
-nix_remove()  { nix-env -e "$@"; }
-nix_purge()   { nix-env -e "$@" && nix-collect-garbage -d; }
-nix_search()  { nix search nixpkgs "$@"; }
-nix_list()    { nix-env -q; }
-nix_list_files() {
-	# List files in a package's store path
-	if nix-env -q | grep -q "^$@"; then
-		# Package is installed, find its store path
-		STORE_PATH=$(nix-env -q --out-path "$@" | awk '{print $2}')
-		find "$STORE_PATH" -type f 2>/dev/null
+# Nix detection and helper functions
+__nix_detect_version() {
+	# Returns Nix version (e.g., "2.18.1")
+	nix --version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1
+}
+
+__nix_version_ge() {
+	# Compare Nix version: returns 0 if current >= required
+	# Usage: __nix_version_ge "2.4"
+	local required="$1"
+	local current=$(__nix_detect_version)
+	
+	if [[ -z "$current" ]]; then
+		return 1
+	fi
+	
+	# Simple version comparison
+	printf '%s\n%s\n' "$required" "$current" | sort -V -C
+	return $?
+}
+
+__nix_detect_flakes() {
+	# Detects if flakes are enabled
+	# Checks ~/.config/nix/nix.conf and /etc/nix/nix.conf
+	local config_files=(
+		"$HOME/.config/nix/nix.conf"
+		"/etc/nix/nix.conf"
+	)
+	
+	for conf in "${config_files[@]}"; do
+		if [[ -f "$conf" ]]; then
+			if grep -q "experimental-features.*nix-command.*flakes\|experimental-features.*flakes.*nix-command" "$conf" 2>/dev/null; then
+				return 0
+			fi
+		fi
+	done
+	
+	return 1
+}
+
+__nix_detect_nixos() {
+	# Detects if running on NixOS
+	grep -q -i nixos /etc/os-release 2>/dev/null
+}
+
+__nix_get_install_method() {
+	# Returns installation method based on config and detection
+	local method="$NIX_INSTALL_METHOD"
+	
+	if [[ "$method" == "auto" ]]; then
+		# Auto-detect best method
+		if __nix_version_ge "2.4"; then
+			# Check flakes support
+			local flakes_enabled="$NIX_FLAKES_ENABLED"
+			
+			if [[ "$flakes_enabled" == "auto" ]]; then
+				if __nix_detect_flakes; then
+					echo "flakes"
+					return 0
+				fi
+			elif [[ "$flakes_enabled" == "yes" ]]; then
+				echo "flakes"
+				return 0
+			fi
+			
+			# Nix 2.4+ without flakes
+			echo "nix-profile"
+			return 0
+		else
+			# Older Nix version
+			echo "nix-env"
+			return 0
+		fi
 	else
-		echo "Package '$@' is not installed"
-		exit 1
+		# Use configured method
+		echo "$method"
+		return 0
 	fi
 }
-nix_manual()  {
-	# Install from a local .nix file or derivation
-	nix-env -i "$@"
+
+__nix_convert_package_name() {
+	# Converts package name based on installation method
+	# firefox -> nixpkgs.firefox (for nix-env)
+	# firefox -> nixpkgs#firefox (for nix profile with flakes)
+	local pkg="$1"
+	local method=$(__nix_get_install_method)
+	
+	# If package already has channel/flake prefix, return as-is
+	if [[ "$pkg" == *"."* ]] || [[ "$pkg" == *"#"* ]]; then
+		# Convert between formats if needed
+		if [[ "$method" == "nix-env" ]] && [[ "$pkg" == *"#"* ]]; then
+			echo "${pkg/\#/.}"
+		elif [[ "$method" == "flakes" ]] && [[ "$pkg" == *"."* ]]; then
+			echo "${pkg/\./#}"
+		else
+			echo "$pkg"
+		fi
+	else
+		# Add channel prefix
+		if [[ "$method" == "nix-env" ]]; then
+			echo "${NIX_CHANNEL}.${pkg}"
+		elif [[ "$method" == "nix-profile" ]]; then
+			echo "${NIX_CHANNEL}.${pkg}"
+		else
+			# flakes
+			echo "${NIX_CHANNEL}#${pkg}"
+		fi
+	fi
 }
+
+nix_install() {
+	local method=$(__nix_get_install_method)
+	local pkg=$(__nix_convert_package_name "$@")
+	
+	case "$method" in
+		nix-env)
+			nix-env -iA "$pkg"
+			;;
+		nix-profile)
+			nix profile install "$pkg"
+			;;
+		flakes)
+			nix profile install "$pkg"
+			;;
+	esac
+}
+
+nix_update() {
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -u
+			;;
+		nix-profile|flakes)
+			nix profile upgrade '.*'
+			;;
+	esac
+}
+
+nix_remove() {
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -e "$@"
+			;;
+		nix-profile|flakes)
+			nix profile remove "$@"
+			;;
+	esac
+}
+
+nix_purge() {
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -e "$@" && nix-collect-garbage -d
+			;;
+		nix-profile|flakes)
+			nix profile remove "$@" && nix-collect-garbage -d
+			;;
+	esac
+}
+
+nix_search() {
+	# nix search works the same for all methods
+	nix search nixpkgs "$@"
+}
+
+nix_list() {
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -q
+			;;
+		nix-profile|flakes)
+			nix profile list | awk '{print $1}' | sed 's/.*#//'
+			;;
+	esac
+}
+nix_list_files() {
+	# List files in a package's store path
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			if nix-env -q | grep -q "^$@"; then
+				# Package is installed, find its store path
+				STORE_PATH=$(nix-env -q --out-path "$@" | awk '{print $2}')
+				find "$STORE_PATH" -type f 2>/dev/null
+			else
+				echo "Package '$@' is not installed"
+				exit 1
+			fi
+			;;
+		nix-profile|flakes)
+			# For nix profile, we need to find the package in the profile
+			local profile_path=$(nix profile list | grep "$@" | awk '{print $2}')
+			if [[ -n "$profile_path" ]]; then
+				find "$profile_path" -type f 2>/dev/null
+			else
+				echo "Package '$@' is not installed"
+				exit 1
+			fi
+			;;
+	esac
+}
+
+nix_manual() {
+	# Install from a local .nix file or derivation
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -i "$@"
+			;;
+		nix-profile|flakes)
+			nix profile install "$@"
+			;;
+	esac
+}
+
 nix_repo_age() {
 	# Check the age of the nix channels
 	if [ -d "$HOME/.nix-defexpr/channels" ]; then
@@ -307,16 +587,28 @@ nix_repo_age() {
 		date +%s
 	fi
 }
+
 nix_repo_update() {
 	if ! nix-channel --update &> /dev/null; then
 		echo 'out-of-date'
 		exit 1
 	fi
 }
+
 nix_num_updates() {
 	# Compare current generation with what would be updated
-	nix-env -u --dry-run 2>/dev/null | grep -c "will be updated"
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -u --dry-run 2>/dev/null | grep -c "will be updated"
+			;;
+		nix-profile|flakes)
+			nix profile diff-closures 2>/dev/null | grep -c "→" || echo "0"
+			;;
+	esac
 }
+
 nix_num_pkgs() { nix_list | wc -l; }
 
 # Abstraction
@@ -331,7 +623,10 @@ repo_update_if_needed() {
 }
 
 # Find the current distribution
-if [ -f /etc/os-release ]; then
+if [[ -n "$DEFAULT_PKGMAN" ]]; then
+	# Use configured package manager
+	PKGMAN="$DEFAULT_PKGMAN"
+elif [ -f /etc/os-release ]; then
 	if grep -q -i nixos /etc/os-release; then
 		PKGMAN='nix'
 	elif grep -q arch /etc/os-release; then
@@ -365,6 +660,12 @@ else
 		echo "Error: cannot detect platform"
 		exit 1
 	fi
+fi
+
+# Check for --init-config before platform detection
+########################################################################
+if [[ "$1" == "--init-config" ]]; then
+	init_config
 fi
 
 # find what we're doing
@@ -445,6 +746,10 @@ case "$action" in
 		shift 1
 		eval ${PKGMAN}_manual "$@"
 		bye
+	;;
+# init-config
+	--init-config)
+		init_config
 	;;
 
 	*)

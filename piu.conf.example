@@ -1,0 +1,43 @@
+# Piu Configuration File
+# ======================
+# This file controls the behavior of piu package manager wrapper
+# Copy this file to ~/.config/piu/piu.conf and customize as needed
+
+# General settings
+# ================
+
+# Default package manager to use (leave empty for auto-detection)
+# Useful when multiple package managers are available (e.g., nix and xbps on Void)
+# Options: apt, pacman, xbps, nix, apk, dnf, zypper, brew
+# Example: DEFAULT_PKGMAN="nix"
+DEFAULT_PKGMAN=""
+
+# Nix-specific settings
+# =====================
+
+# Installation method: auto, nix-env, nix-profile, flakes
+# - auto: automatically detect best available method (recommended)
+# - nix-env: use traditional nix-env -iA (compatible with all versions)
+# - nix-profile: use modern nix profile command (requires Nix 2.4+)
+# - flakes: use flakes syntax with nix profile (requires flakes enabled)
+NIX_INSTALL_METHOD="auto"
+
+# Flakes support: auto, yes, no
+# - auto: detect if flakes are enabled in nix.conf (recommended)
+# - yes: force flakes usage (will fail if not enabled)
+# - no: never use flakes
+NIX_FLAKES_ENABLED="auto"
+
+# Installation scope: user, system
+# - user: install to user profile (default, works everywhere)
+# - system: install system-wide (NixOS only, requires sudo)
+NIX_SCOPE="user"
+
+# Channel to use for installations (default: nixpkgs)
+# You can change this to use a different channel or flake
+NIX_CHANNEL="nixpkgs"
+
+# Examples of other possible settings (not yet implemented):
+# APT_AUTO_YES="yes"
+# PACMAN_AUTO_YES="yes"
+# BREW_AUTO_UPDATE="no"
