@@ -275,6 +275,49 @@ brew_repo_update() { brew update; }
 brew_num_updates() { not_implemented; }
 brew_num_pkgs() { brew_list | wc -l; }
 is_darwin() { uname -a | grep Darwin > /dev/null; }
+#
+# NixOS / Nix
+#
+nix_install() { nix-env -iA nixpkgs."$@"; }
+nix_update()  { nix-env -u; }
+nix_remove()  { nix-env -e "$@"; }
+nix_purge()   { nix-env -e "$@" && nix-collect-garbage -d; }
+nix_search()  { nix search nixpkgs "$@"; }
+nix_list()    { nix-env -q; }
+nix_list_files() {
+	# List files in a package's store path
+	if nix-env -q | grep -q "^$@"; then
+		# Package is installed, find its store path
+		STORE_PATH=$(nix-env -q --out-path "$@" | awk '{print $2}')
+		find "$STORE_PATH" -type f 2>/dev/null
+	else
+		echo "Package '$@' is not installed"
+		exit 1
+	fi
+}
+nix_manual()  {
+	# Install from a local .nix file or derivation
+	nix-env -i "$@"
+}
+nix_repo_age() {
+	# Check the age of the nix channels
+	if [ -d "$HOME/.nix-defexpr/channels" ]; then
+		stat -c '%Y' "$HOME/.nix-defexpr/channels"
+	else
+		date +%s
+	fi
+}
+nix_repo_update() {
+	if ! nix-channel --update &> /dev/null; then
+		echo 'out-of-date'
+		exit 1
+	fi
+}
+nix_num_updates() {
+	# Compare current generation with what would be updated
+	nix-env -u --dry-run 2>/dev/null | grep -c "will be updated"
+}
+nix_num_pkgs() { nix_list | wc -l; }
 
 # Abstraction
 ########################################################################
@@ -289,7 +332,9 @@ repo_update_if_needed() {
 
 # Find the current distribution
 if [ -f /etc/os-release ]; then
-	if grep -q arch /etc/os-release; then
+	if grep -q -i nixos /etc/os-release; then
+		PKGMAN='nix'
+	elif grep -q arch /etc/os-release; then
 		PKGMAN='pacman'
 	elif [[ -f /etc/debian_version ]]; then
 		PKGMAN='apt'
@@ -313,6 +358,9 @@ if [ -f /etc/os-release ]; then
 else
 	if is_darwin; then
 		PKGMAN='brew'
+	elif hash nix-env 2>/dev/null; then
+		# Nix can be installed on non-NixOS systems
+		PKGMAN='nix'
 	else
 		echo "Error: cannot detect platform"
 		exit 1
