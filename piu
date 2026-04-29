@@ -225,7 +225,7 @@ dnf_purge()   {
 dnf_search()  { dnf search -C "$@"; }
 dnf_list()    { dnf list installed -C | awk '{if(NR>1)print $1}'; }
 dnf_list_files() { dnf -C repoquery -l "$@"; }
-dnf_manual()  { sudo dnf localinstall "$@"; }
+dnf_manual()  { sudo dnf install "$@"; }
 dnf_repo_age() { stat -c '%Y' '/var/cache/dnf/packages.db'; }
 dnf_repo_update() {
 	if ! dnf clean metadata && dnf check-update &> /dev/null; then
