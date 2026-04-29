@@ -244,7 +244,7 @@ zypper_remove()  { sudo zypper rm -C "$@"; }
 zypper_purge()   { sudo zypper rm -u "$@"; }
 zypper_search()  { zypper search "$@"; }
 zypper_list()    { zypper search -i | grep ^i | awk '{print $3}'; }
-zypper_list_files() { dnf -C repoquery -l "$@"; }
+zypper_list_files() { rpm -ql "$@"; }
 zypper_manual()  { sudo zypper in "$@"; }
 zypper_repo_age() { stat -c '%Y' '/var/cache/zypp/raw/repo-oss/repodata/repomd.xml'; }
 zypper_repo_update() {
