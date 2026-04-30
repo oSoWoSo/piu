@@ -59,7 +59,7 @@ their respective owners.*
 ## Installation
 
 ```console
-$ curl https://raw.githubusercontent.com/beyondmeh/piu/master/piu -o piu && chmod +x piu && sudo mv piu /usr/local/bin
+$ curl https://raw.githubusercontent.com/oSoWoSo/piu/main/piu -o piu && chmod +x piu && sudo mv piu /usr/local/bin
 ```
 Alternatively, if you have something like `~/bin` setup, just download
 `piu` there.
@@ -104,12 +104,12 @@ have write permission.
 
 
 ### Bug Reports
-Submit bug reports via GitHub's [Issue Tracker](https://github.com/beyondmeh/piu/issues)
+Submit bug reports via GitHub's [Issue Tracker](https://github.com/oSoWoSo/piu/issues)
 
 
-### Contributing 
+### Contributing
 
-`piu` makes package manage stink even less thanks to [all of its contributors](https://github.com/beyondmeh/piu/graphs/contributors), both on GitHub and elsewhere. 
+`piu` makes package manage stink even less thanks to [all of its contributors](https://github.com/beyondmeh/piu/graphs/contributors), both on GitHub and elsewhere.
 
 > The project's skunk logo was drawn by the very talented Kelly. It has
 > been digitized, cropped, and optimized for the web using
@@ -119,10 +119,11 @@ Submit bug reports via GitHub's [Issue Tracker](https://github.com/beyondmeh/piu
 > located in the `src/logo` folder. All versions of the skunk logo
 > are licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/).
 
-If you can make piu better or add support for a missing distro, please feel free to submit a pull request. There are no further requirements, contributing to `piu` is easy and also doesn't stink! 
+If you can make piu better or add support for a missing distro, please feel free to submit a pull request. There are no further requirements, contributing to `piu` is easy and also doesn't stink!
 
 ## License
-Copyright &copy; 2017 - 2023 BeyondMeh, except where otherwise noted.
+Copyright &copy; 2017 - 2023 BeyondMeh, except where otherwise noted.  
+	2024 - ? zenobit
 
 Licensed under the [ISC license](https://github.com/beyondmeh/piu/blob/master/LICENSE).
 
