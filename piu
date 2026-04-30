@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #Cross-platform package manager wrapper
 #https://github.com/beyondmeh/piu
@@ -9,13 +9,13 @@ __piutmp() {
 	# Piu Temp Directory Manager
 	case ${1} in
 		[sS][tT][aA][rR][tT])
-			[[ -d "/tmp/${0}" ]] || mkdir -p "/tmp/${0}" 2> /dev/null 
+			[[ -d "/tmp/${0}" ]] || mkdir -p "/tmp/${0}" 2> /dev/null
 		;;
 		[sS][tT][oO][pP])
 			[[ -d "/tmp/${0}" ]] && rm -rf "/tmp/${0}" 2> /dev/null
 		;;
 		[rR][eE][sS][tT][aA][rR][tT])
-			[[ -d "/tmp/${0}" ]] && { rm -rf "/tmp/${0}" 2> /dev/null && mkdir -p "/tmp/${0}" 2> /dev/null ; } 
+			[[ -d "/tmp/${0}" ]] && { rm -rf "/tmp/${0}" 2> /dev/null && mkdir -p "/tmp/${0}" 2> /dev/null ; }
 		;;
 	esac
 }
@@ -53,6 +53,22 @@ trap bye INT
 
 UPDATE_AFTER=43200 # 12 hours
 
+# Load configuration
+########################################################################
+PIU_CONFIG="${HOME}/.config/piu/piu.conf"
+
+# Default values
+DEFAULT_PKGMAN=""  # Empty means auto-detect
+NIX_INSTALL_METHOD="auto"
+NIX_FLAKES_ENABLED="auto"
+NIX_SCOPE="user"
+NIX_CHANNEL="nixpkgs"
+
+# Load config if exists
+if [[ -f "$PIU_CONFIG" ]]; then
+	source "$PIU_CONFIG"
+fi
+
 usage() {
 cat <<HELP
 Cross-platform package manager wrapper
@@ -78,6 +94,10 @@ usage: $(basename "$0") OPTION [--cask] [PACKAGE]
    (l)ist            : list installed packages
    (nu) num-updates  : number of packages with updates
    (np) num-packages : number of installed packages
+   
+   CONFIGURATION
+   --init-config     : create default configuration file at ~/.config/piu/piu.conf
+   --apply-nix       : enable Nix experimental features (nix-command and flakes)
 
 https://github.com/beyondmeh/piu
 
@@ -86,9 +106,120 @@ Licensed under the ISC license.
 HELP
 }
 
+init_config() {
+	local config_dir="${HOME}/.config/piu"
+	local config_file="${config_dir}/piu.conf"
+
+	# Check if config already exists
+	if [[ -f "$config_file" ]]; then
+		echo "Configuration file already exists at: $config_file"
+		echo "To recreate it, please remove the existing file first."
+		exit 1
+	fi
+
+	# Create config directory if it doesn't exist
+	if [[ ! -d "$config_dir" ]]; then
+		mkdir -p "$config_dir" 2>/dev/null
+		if [[ $? -ne 0 ]]; then
+			echo "Error: Could not create directory $config_dir"
+			exit 1
+		fi
+	fi
+
+	# Find the example config file
+	local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	local example_file="${script_dir}/piu.conf.example"
+
+	if [[ -f "$example_file" ]]; then
+		# Copy example file
+		cp "$example_file" "$config_file"
+		echo "Configuration file created at: $config_file"
+		echo "Edit this file to customize piu behavior."
+	else
+		# Create basic config if example doesn't exist
+		cat > "$config_file" <<'EOF'
+# Piu Configuration File
+# ======================
+
+# Nix-specific settings
+# =====================
+
+# Installation method: auto, nix-env, nix-profile, flakes
+NIX_INSTALL_METHOD="auto"
+
+# Flakes support: auto, yes, no
+NIX_FLAKES_ENABLED="auto"
+
+# Installation scope: user, system
+NIX_SCOPE="user"
+
+# Channel to use for installations
+NIX_CHANNEL="nixpkgs"
+EOF
+		echo "Configuration file created at: $config_file"
+		echo "Edit this file to customize piu behavior."
+	fi
+
+	exit 0
+}
+
 # Utils
 ########################################################################
 not_implemented() { echo "'${FUNCNAME[1]}' not implemented yet!" && exit 1; }
+
+nix_apply_experimental_features() {
+	# Enable experimental features for Nix
+	echo "This will enable experimental Nix features (nix-command and flakes)"
+	echo "by adding them to /etc/nix/nix.conf"
+	echo ""
+	echo "The following line will be added:"
+	echo "  experimental-features = nix-command flakes"
+	echo ""
+	read -p "Do you want to continue? [y/N] " -n 1 -r
+	echo
+	
+	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+		echo "Cancelled."
+		exit 0
+	fi
+	
+	# Check if /etc/nix/nix.conf exists
+	if [[ ! -f /etc/nix/nix.conf ]]; then
+		echo "Creating /etc/nix/nix.conf..."
+		sudo mkdir -p /etc/nix
+		echo "experimental-features = nix-command flakes" | sudo tee /etc/nix/nix.conf > /dev/null
+	else
+		# Check if experimental-features already exists
+		if grep -q "^experimental-features" /etc/nix/nix.conf; then
+			echo "experimental-features already configured in /etc/nix/nix.conf"
+			echo "Current configuration:"
+			grep "^experimental-features" /etc/nix/nix.conf
+			echo ""
+			read -p "Do you want to update it? [y/N] " -n 1 -r
+			echo
+			
+			if [[ $REPLY =~ ^[Yy]$ ]]; then
+				sudo sed -i 's/^experimental-features.*/experimental-features = nix-command flakes/' /etc/nix/nix.conf
+				echo "Updated experimental-features in /etc/nix/nix.conf"
+			else
+				echo "Cancelled."
+				exit 0
+			fi
+		else
+			# Append to existing config
+			echo "experimental-features = nix-command flakes" | sudo tee -a /etc/nix/nix.conf > /dev/null
+			echo "Added experimental-features to /etc/nix/nix.conf"
+		fi
+	fi
+	
+	echo ""
+	echo "Experimental features enabled successfully!"
+	echo "You may need to restart your shell or run: source ~/.bashrc"
+	echo ""
+	echo "To verify, run: nix --version"
+	
+	exit 0
+}
 
 # Distro Specific
 ########################################################################
@@ -225,7 +356,7 @@ dnf_purge()   {
 dnf_search()  { dnf search -C "$@"; }
 dnf_list()    { dnf list installed -C | awk '{if(NR>1)print $1}'; }
 dnf_list_files() { dnf -C repoquery -l "$@"; }
-dnf_manual()  { sudo dnf localinstall "$@"; }
+dnf_manual()  { sudo dnf install "$@"; }
 dnf_repo_age() { stat -c '%Y' '/var/cache/dnf/packages.db'; }
 dnf_repo_update() {
 	if ! dnf clean metadata && dnf check-update &> /dev/null; then
@@ -244,7 +375,7 @@ zypper_remove()  { sudo zypper rm -C "$@"; }
 zypper_purge()   { sudo zypper rm -u "$@"; }
 zypper_search()  { zypper search "$@"; }
 zypper_list()    { zypper search -i | grep ^i | awk '{print $3}'; }
-zypper_list_files() { dnf -C repoquery -l "$@"; }
+zypper_list_files() { rpm -ql "$@"; }
 zypper_manual()  { sudo zypper in "$@"; }
 zypper_repo_age() { stat -c '%Y' '/var/cache/zypp/raw/repo-oss/repodata/repomd.xml'; }
 zypper_repo_update() {
@@ -254,7 +385,7 @@ zypper_repo_update() {
 	fi
 }
 zypper_num_updates() { zypper lu | grep ^v | wc -l; }
-zyyper_num_pkgs() { zypper_list | wc -l; }
+zypper_num_pkgs() { zypper_list | wc -l; }
 #
 # macOS
 #
@@ -275,6 +406,305 @@ brew_repo_update() { brew update; }
 brew_num_updates() { not_implemented; }
 brew_num_pkgs() { brew_list | wc -l; }
 is_darwin() { uname -a | grep Darwin > /dev/null; }
+#
+# NixOS / Nix
+#
+# Nix detection and helper functions
+__nix_detect_version() {
+	# Returns Nix version (e.g., "2.18.1")
+	# Try nix-env first as it doesn't require experimental features
+	local version=$(nix-env --version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+	if [[ -z "$version" ]]; then
+		# Fallback to nix --version
+		version=$(nix --version 2>/dev/null | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+	fi
+	echo "$version"
+}
+
+__nix_version_ge() {
+	# Compare Nix version: returns 0 if current >= required
+	# Usage: __nix_version_ge "2.4"
+	local required="$1"
+	local current=$(__nix_detect_version)
+
+	if [[ -z "$current" ]]; then
+		return 1
+	fi
+
+	# Simple version comparison
+	printf '%s\n%s\n' "$required" "$current" | sort -V -C
+	return $?
+}
+
+__nix_detect_flakes() {
+	# Detects if flakes are enabled
+	# Checks ~/.config/nix/nix.conf and /etc/nix/nix.conf
+	local config_files=(
+		"$HOME/.config/nix/nix.conf"
+		"/etc/nix/nix.conf"
+	)
+
+	for conf in "${config_files[@]}"; do
+		if [[ -f "$conf" ]]; then
+			if grep -q "experimental-features.*nix-command.*flakes\|experimental-features.*flakes.*nix-command" "$conf" 2>/dev/null; then
+				return 0
+			fi
+		fi
+	done
+
+	# Also try to actually run a nix command to test
+	if nix --version &>/dev/null; then
+		return 0
+	fi
+
+	return 1
+}
+
+__nix_detect_nixos() {
+	# Detects if running on NixOS
+	grep -q -i nixos /etc/os-release 2>/dev/null
+}
+
+__nix_get_install_method() {
+	# Returns installation method based on config and detection
+	local method="$NIX_INSTALL_METHOD"
+
+	if [[ "$method" == "auto" ]]; then
+		# Auto-detect best method
+		if __nix_version_ge "2.4"; then
+			# Check flakes support
+			local flakes_enabled="$NIX_FLAKES_ENABLED"
+
+			if [[ "$flakes_enabled" == "auto" ]]; then
+				if __nix_detect_flakes; then
+					echo "flakes"
+					return 0
+				fi
+			elif [[ "$flakes_enabled" == "yes" ]]; then
+				# User wants flakes but verify they work
+				if __nix_detect_flakes; then
+					echo "flakes"
+					return 0
+				else
+					# Flakes requested but not available, fallback to nix-env
+					echo "nix-env"
+					return 0
+				fi
+			fi
+
+			# Nix 2.4+ without flakes - check if nix-command works
+			if nix --version &>/dev/null; then
+				echo "nix-profile"
+				return 0
+			else
+				# nix-command not available, use nix-env
+				echo "nix-env"
+				return 0
+			fi
+		else
+			# Older Nix version
+			echo "nix-env"
+			return 0
+		fi
+	else
+		# Use configured method
+		echo "$method"
+		return 0
+	fi
+}
+
+__nix_convert_package_name() {
+	# Converts package name based on installation method
+	# firefox -> nixpkgs.firefox (for nix-env)
+	# firefox -> nixpkgs#firefox (for nix profile with flakes)
+	local pkg="$1"
+	local method=$(__nix_get_install_method)
+
+	# If package already has channel/flake prefix, return as-is
+	if [[ "$pkg" == *"."* ]] || [[ "$pkg" == *"#"* ]]; then
+		# Convert between formats if needed
+		if [[ "$method" == "nix-env" ]] && [[ "$pkg" == *"#"* ]]; then
+			echo "${pkg/\#/.}"
+		elif [[ "$method" == "flakes" ]] && [[ "$pkg" == *"."* ]]; then
+			echo "${pkg/\./#}"
+		else
+			echo "$pkg"
+		fi
+	else
+		# Add channel prefix
+		if [[ "$method" == "nix-env" ]]; then
+			echo "${NIX_CHANNEL}.${pkg}"
+		elif [[ "$method" == "nix-profile" ]]; then
+			echo "${NIX_CHANNEL}.${pkg}"
+		else
+			# flakes
+			echo "${NIX_CHANNEL}#${pkg}"
+		fi
+	fi
+}
+
+nix_install() {
+	local method=$(__nix_get_install_method)
+	local pkg=$(__nix_convert_package_name "$@")
+
+	case "$method" in
+		nix-env)
+			nix-env -iA "$pkg"
+			;;
+		nix-profile)
+			nix profile install "$pkg"
+			;;
+		flakes)
+			nix profile install "$pkg"
+			;;
+	esac
+}
+
+nix_update() {
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			nix-env -u
+			;;
+		nix-profile|flakes)
+			nix profile upgrade '.*'
+			;;
+	esac
+}
+
+nix_remove() {
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			nix-env -e "$@"
+			;;
+		nix-profile|flakes)
+			nix profile remove "$@"
+			;;
+	esac
+}
+
+nix_purge() {
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			nix-env -e "$@" && nix-collect-garbage -d
+			;;
+		nix-profile|flakes)
+			nix profile remove "$@" && nix-collect-garbage -d
+			;;
+	esac
+}
+
+nix_search() {
+	# Use appropriate search method based on installation method
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			# Use nix-env for searching (doesn't require experimental features)
+			nix-env -qaP "$@" | grep -i "$@"
+			;;
+		nix-profile|flakes)
+			# Try nix search, fallback to nix-env if it fails
+			if ! nix search nixpkgs "$@" 2>/dev/null; then
+				nix-env -qaP "$@" | grep -i "$@"
+			fi
+			;;
+	esac
+}
+
+nix_list() {
+	local method=$(__nix_get_install_method)
+	
+	case "$method" in
+		nix-env)
+			nix-env -q
+			;;
+		nix-profile|flakes)
+			# Try nix profile list, fallback to nix-env if it fails
+			if ! nix profile list 2>/dev/null | awk '{print $1}' | sed 's/.*#//'; then
+				nix-env -q
+			fi
+			;;
+	esac
+}
+nix_list_files() {
+	# List files in a package's store path
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			if nix-env -q | grep -q "^$@"; then
+				# Package is installed, find its store path
+				STORE_PATH=$(nix-env -q --out-path "$@" | awk '{print $2}')
+				find "$STORE_PATH" -type f 2>/dev/null
+			else
+				echo "Package '$@' is not installed"
+				exit 1
+			fi
+			;;
+		nix-profile|flakes)
+			# For nix profile, we need to find the package in the profile
+			local profile_path=$(nix profile list | grep "$@" | awk '{print $2}')
+			if [[ -n "$profile_path" ]]; then
+				find "$profile_path" -type f 2>/dev/null
+			else
+				echo "Package '$@' is not installed"
+				exit 1
+			fi
+			;;
+	esac
+}
+
+nix_manual() {
+	# Install from a local .nix file or derivation
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			nix-env -i "$@"
+			;;
+		nix-profile|flakes)
+			nix profile install "$@"
+			;;
+	esac
+}
+
+nix_repo_age() {
+	# Check the age of the nix channels
+	if [ -d "$HOME/.nix-defexpr/channels" ]; then
+		stat -c '%Y' "$HOME/.nix-defexpr/channels"
+	else
+		date +%s
+	fi
+}
+
+nix_repo_update() {
+	if ! nix-channel --update &> /dev/null; then
+		echo 'out-of-date'
+		exit 1
+	fi
+}
+
+nix_num_updates() {
+	# Compare current generation with what would be updated
+	local method=$(__nix_get_install_method)
+
+	case "$method" in
+		nix-env)
+			nix-env -u --dry-run 2>/dev/null | grep -c "will be updated"
+			;;
+		nix-profile|flakes)
+			nix profile diff-closures 2>/dev/null | grep -c "→" || echo "0"
+			;;
+	esac
+}
+
+nix_num_pkgs() { nix_list | wc -l; }
 
 # Abstraction
 ########################################################################
@@ -288,8 +718,13 @@ repo_update_if_needed() {
 }
 
 # Find the current distribution
-if [ -f /etc/os-release ]; then
-	if grep -q arch /etc/os-release; then
+if [[ -n "$DEFAULT_PKGMAN" ]]; then
+	# Use configured package manager
+	PKGMAN="$DEFAULT_PKGMAN"
+elif [ -f /etc/os-release ]; then
+	if grep -q -i nixos /etc/os-release; then
+		PKGMAN='nix'
+	elif grep -q arch /etc/os-release; then
 		PKGMAN='pacman'
 	elif [[ -f /etc/debian_version ]]; then
 		PKGMAN='apt'
@@ -313,10 +748,23 @@ if [ -f /etc/os-release ]; then
 else
 	if is_darwin; then
 		PKGMAN='brew'
+	elif hash nix-env 2>/dev/null; then
+		# Nix can be installed on non-NixOS systems
+		PKGMAN='nix'
 	else
 		echo "Error: cannot detect platform"
 		exit 1
 	fi
+fi
+
+# Check for --init-config and --apply-nix before platform detection
+########################################################################
+if [[ "$1" == "--init-config" ]]; then
+	init_config
+fi
+
+if [[ "$1" == "--apply-nix" ]]; then
+	nix_apply_experimental_features
 fi
 
 # find what we're doing
@@ -397,6 +845,10 @@ case "$action" in
 		shift 1
 		eval ${PKGMAN}_manual "$@"
 		bye
+	;;
+# init-config
+	--init-config)
+		init_config
 	;;
 
 	*)
